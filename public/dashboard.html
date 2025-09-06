@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Secretária AI</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">Secretária AI</div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a href="/dashboard.html" class="nav-link active">Dashboard</a></li>
+                    <li class="nav-item"><a href="/integracoes.html" class="nav-link">Integrações</a></li>
+                    <li class="nav-item"><a href="#" id="logout-btn" class="nav-link">Sair</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mt-4">
+        <h1 class="mb-4">Dashboard</h1>
+        
+        <div class="flex justify-between mb-4">
+            <div class="card" style="width: 48%;">
+                <h2 class="card-title">Status das Integrações</h2>
+                <div class="card-content">
+                    <div class="flex justify-between mb-2">
+                        <div>WhatsApp:</div>
+                        <div id="whatsapp-status">Carregando...</div>
+                    </div>
+                    <div class="flex justify-between">
+                        <div>Google Calendar:</div>
+                        <div id="gcal-status">Carregando...</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="/integracoes.html" class="btn btn-primary">Gerenciar Integrações</a>
+                </div>
+            </div>
+            
+            <div class="card" style="width: 48%;">
+                <h2 class="card-title">Estatísticas</h2>
+                <div class="card-content">
+                    <canvas id="stats-chart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <h2 class="card-title">Eventos Recentes</h2>
+            <div class="card-content">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Tipo</th>
+                            <th>Descrição</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-table">
+                        <tr>
+                            <td colspan="4" class="text-center">Carregando eventos...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-copyright">&copy; 2025 Secretária AI</div>
+            <ul class="footer-links">
+                <li><a href="#" class="footer-link">Termos de Uso</a></li>
+                <li><a href="#" class="footer-link">Privacidade</a></li>
+                <li><a href="#" class="footer-link">Suporte</a></li>
+            </ul>
+        </div>
+    </footer>
+
+    <script>
+        // Verificar autenticação
+        document.addEventListener('DOMContentLoaded', function() {
+            // Verificar se o usuário está autenticado
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            // Configurar logout
+            document.getElementById('logout-btn').addEventListener('click', function(e) {
+                e.preventDefault();
+                fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    localStorage.removeItem('authToken');
+                    window.location.href = '/login.html';
+                })
+                .catch(error => console.error('Erro ao fazer logout:', error));
+            });
+
+            // Carregar status das integrações
+            loadIntegrationStatus();
+            
+            // Carregar estatísticas
+            loadStatistics();
+            
+            // Carregar eventos recentes
+            loadRecentEvents();
+        });
+
+        // Função para carregar status das integrações
+        function loadIntegrationStatus() {
+            const token = localStorage.getItem('authToken');
+            
+            // Verificar status do WhatsApp
+            fetch('/api/whatsapp/status', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const statusElement = document.getElementById('whatsapp-status');
+                if (data.connected) {
+                    statusElement.textContent = 'Conectado';
+                    statusElement.style.color = '#2E7D32';
+                } else {
+                    statusElement.textContent = 'Desconectado';
+                    statusElement.style.color = '#D32F2F';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar status do WhatsApp:', error);
+                document.getElementById('whatsapp-status').textContent = 'Erro ao verificar';
+                document.getElementById('whatsapp-status').style.color = '#F57F17';
+            });
+            
+            // Verificar status do Google Calendar
+            fetch('/api/google-calendar/status', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const statusElement = document.getElementById('gcal-status');
+                if (data.connected) {
+                    statusElement.textContent = 'Conectado';
+                    statusElement.style.color = '#2E7D32';
+                } else {
+                    statusElement.textContent = 'Desconectado';
+                    statusElement.style.color = '#D32F2F';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar status do Google Calendar:', error);
+                document.getElementById('gcal-status').textContent = 'Erro ao verificar';
+                document.getElementById('gcal-status').style.color = '#F57F17';
+            });
+        }
+
+        // Função para carregar estatísticas
+        function loadStatistics() {
+            // Dados de exemplo para o gráfico
+            const data = {
+                labels: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'],
+                datasets: [{
+                    label: 'Mensagens Processadas',
+                    data: [12, 19, 3, 5, 2, 3, 7],
+                    backgroundColor: 'rgba(66, 133, 244, 0.2)',
+                    borderColor: 'rgba(66, 133, 244, 1)',
+                    borderWidth: 1
+                }, {
+                    label: 'Eventos Agendados',
+                    data: [5, 7, 2, 8, 3, 1, 4],
+                    backgroundColor: 'rgba(52, 168, 83, 0.2)',
+                    borderColor: 'rgba(52, 168, 83, 1)',
+                    borderWidth: 1
+                }]
+            };
+
+            const ctx = document.getElementById('stats-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Em uma implementação real, você buscaria esses dados da API
+            // fetch('/api/statistics', { headers: { 'Authorization': `Bearer ${token}` } })
+            //     .then(response => response.json())
+            //     .then(data => { ... })
+        }
+
+        // Função para carregar eventos recentes
+        function loadRecentEvents() {
+            // Dados de exemplo para a tabela de eventos
+            const events = [
+                { date: '2025-09-06 14:30', type: 'Mensagem', description: 'Novo cliente solicitou informações', status: 'Processado' },
+                { date: '2025-09-06 10:15', type: 'Agendamento', description: 'Reunião com Fornecedor XYZ', status: 'Confirmado' },
+                { date: '2025-09-05 16:45', type: 'Mensagem', description: 'Dúvida sobre horário de atendimento', status: 'Respondido' },
+                { date: '2025-09-05 09:00', type: 'Agendamento', description: 'Entrevista com candidato', status: 'Pendente' },
+                { date: '2025-09-04 13:20', type: 'Notificação', description: 'Lembrete de pagamento enviado', status: 'Enviado' }
+            ];
+
+            const tableBody = document.getElementById('events-table');
+            tableBody.innerHTML = '';
+
+            events.forEach(event => {
+                const row = document.createElement('tr');
+                
+                const dateCell = document.createElement('td');
+                dateCell.textContent = event.date;
+                row.appendChild(dateCell);
+                
+                const typeCell = document.createElement('td');
+                typeCell.textContent = event.type;
+                row.appendChild(typeCell);
+                
+                const descCell = document.createElement('td');
+                descCell.textContent = event.description;
+                row.appendChild(descCell);
+                
+                const statusCell = document.createElement('td');
+                statusCell.textContent = event.status;
+                
+                // Adicionar cores diferentes para status diferentes
+                if (event.status === 'Processado' || event.status === 'Confirmado' || event.status === 'Respondido') {
+                    statusCell.style.color = '#2E7D32';
+                } else if (event.status === 'Pendente') {
+                    statusCell.style.color = '#F57F17';
+                } else {
+                    statusCell.style.color = '#1565C0';
+                }
+                
+                row.appendChild(statusCell);
+                
+                tableBody.appendChild(row);
+            });
+
+            // Em uma implementação real, você buscaria esses dados da API
+            // const token = localStorage.getItem('authToken');
+            // fetch('/api/events/recent', { headers: { 'Authorization': `Bearer ${token}` } })
+            //     .then(response => response.json())
+            //     .then(data => { ... })
+        }
+    </script>
+</body>
+</html>
