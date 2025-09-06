@@ -1,198 +1,330 @@
-const { google } = require('googleapis');
-require('dotenv').config();
+/**
+ * Integração com a API do Google Calendar
+ */
 
-// Configuração do OAuth2
+const { google } = require('googleapis');
+const { createClient } = require('@supabase/supabase-js');
+const { supabaseUrl, supabaseKey } = require('../config');
+
+// Configurações do OAuth2
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// Escopos necessários para o Google Calendar
-const SCOPES = [
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events'
-];
+// Cliente Supabase
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 /**
- * Cria uma URL de autorização para o Google OAuth
- * @returns {Promise<string>} URL de autorização
+ * Gera a URL de autorização para o Google Calendar
+ * @param {string} userId - ID do usuário no Supabase
+ * @returns {string} URL de autorização
  */
-async function createAuthUrl() {
-  const authUrl = oauth2Client.generateAuthUrl({
+const generateAuthUrl = (userId) => {
+  const scopes = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events'
+  ];
+
+  return oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: SCOPES,
-    prompt: 'consent' // Força a exibição da tela de consentimento para obter refresh_token
+    scope: scopes,
+    prompt: 'consent',
+    state: userId // Passa o ID do usuário como state para recuperar depois
   });
-  
-  return authUrl;
-}
+};
 
 /**
- * Obtém tokens a partir do código de autorização
- * @param {string} code - Código de autorização do Google
- * @returns {Promise<Object>} Dados do token
+ * Processa o código de autorização e salva os tokens
+ * @param {string} code - Código de autorização
+ * @param {string} userId - ID do usuário
+ * @returns {Promise<Object>} Resultado da operação
  */
-async function getTokenFromCode(code) {
+const handleAuthCode = async (code, userId) => {
   try {
+    // Troca o código pelo token de acesso
     const { tokens } = await oauth2Client.getToken(code);
-    return tokens;
-  } catch (error) {
-    console.error('Erro ao obter tokens:', error);
-    throw error;
-  }
-}
-
-/**
- * Configura o cliente OAuth2 com os tokens fornecidos
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- */
-function setupOAuth2Client(accessToken, refreshToken) {
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-    refresh_token: refreshToken
-  });
-  
-  return oauth2Client;
-}
-
-/**
- * Obtém eventos do Google Calendar
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- * @param {Object} options - Opções adicionais (timeMin, timeMax, maxResults)
- * @returns {Promise<Array>} Lista de eventos
- */
-async function getEvents(accessToken, refreshToken, options = {}) {
-  try {
-    const auth = setupOAuth2Client(accessToken, refreshToken);
-    const calendar = google.calendar({ version: 'v3', auth });
     
-    const timeMin = options.timeMin || new Date().toISOString();
-    const timeMax = options.timeMax || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    // Salva os tokens no Supabase
+    const { data, error } = await supabase
+      .from('integrations')
+      .upsert({
+        user_id: userId,
+        provider: 'google_calendar',
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: new Date(tokens.expiry_date).toISOString(),
+        status: 'connected'
+      });
+
+    if (error) throw error;
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error('Erro ao processar código de autorização:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Verifica e atualiza o token se necessário
+ * @param {string} userId - ID do usuário
+ * @returns {Promise<Object>} Cliente autenticado ou erro
+ */
+const getAuthenticatedClient = async (userId) => {
+  try {
+    // Busca os tokens do usuário
+    const { data, error } = await supabase
+      .from('integrations')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('provider', 'google_calendar')
+      .single();
+    
+    if (error) throw error;
+    if (!data) throw new Error('Integração não encontrada');
+    
+    // Verifica se o token expirou
+    const expiresAt = new Date(data.expires_at);
+    const now = new Date();
+    
+    // Configura o cliente com os tokens existentes
+    oauth2Client.setCredentials({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expiry_date: expiresAt.getTime()
+    });
+    
+    // Se o token expirou, atualiza automaticamente
+    if (expiresAt <= now) {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      
+      // Atualiza os tokens no banco
+      const { error: updateError } = await supabase
+        .from('integrations')
+        .update({
+          access_token: credentials.access_token,
+          expires_at: new Date(credentials.expiry_date).toISOString()
+        })
+        .eq('user_id', userId)
+        .eq('provider', 'google_calendar');
+      
+      if (updateError) throw updateError;
+      
+      oauth2Client.setCredentials(credentials);
+    }
+    
+    return { success: true, client: google.calendar({ version: 'v3', auth: oauth2Client }) };
+  } catch (error) {
+    console.error('Erro ao autenticar cliente:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Verifica o status da integração com o Google Calendar
+ * @param {string} userId - ID do usuário
+ * @returns {Promise<Object>} Status da integração
+ */
+const checkIntegrationStatus = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('integrations')
+      .select('status, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('provider', 'google_calendar')
+      .single();
+    
+    if (error) {
+      // Se o erro for de registro não encontrado, retorna desconectado
+      if (error.code === 'PGRST116') {
+        return { success: true, status: 'disconnected' };
+      }
+      throw error;
+    }
+    
+    return { success: true, status: data.status, data };
+  } catch (error) {
+    console.error('Erro ao verificar status da integração:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Desconecta a integração com o Google Calendar
+ * @param {string} userId - ID do usuário
+ * @returns {Promise<Object>} Resultado da operação
+ */
+const disconnectIntegration = async (userId) => {
+  try {
+    // Revoga o token de acesso se existir
+    const { data } = await supabase
+      .from('integrations')
+      .select('access_token')
+      .eq('user_id', userId)
+      .eq('provider', 'google_calendar')
+      .single();
+    
+    if (data && data.access_token) {
+      try {
+        await oauth2Client.revokeToken(data.access_token);
+      } catch (revokeError) {
+        console.warn('Erro ao revogar token:', revokeError);
+        // Continua mesmo se falhar a revogação
+      }
+    }
+    
+    // Remove a integração do banco
+    const { error } = await supabase
+      .from('integrations')
+      .delete()
+      .eq('user_id', userId)
+      .eq('provider', 'google_calendar');
+    
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao desconectar integração:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Lista os próximos eventos do calendário
+ * @param {string} userId - ID do usuário
+ * @param {Object} options - Opções de listagem
+ * @returns {Promise<Object>} Lista de eventos
+ */
+const listEvents = async (userId, options = {}) => {
+  try {
+    const { success, client, error } = await getAuthenticatedClient(userId);
+    if (!success) throw new Error(error);
+    
+    const now = new Date();
+    const timeMin = options.timeMin || now.toISOString();
+    const timeMax = options.timeMax || new Date(now.setDate(now.getDate() + 30)).toISOString();
     const maxResults = options.maxResults || 10;
     
-    const response = await calendar.events.list({
+    const response = await client.events.list({
       calendarId: 'primary',
       timeMin,
       timeMax,
       maxResults,
       singleEvents: true,
-      orderBy: 'startTime',
+      orderBy: 'startTime'
     });
     
-    return response.data.items;
+    return { success: true, events: response.data.items };
   } catch (error) {
-    console.error('Erro ao obter eventos:', error);
-    throw error;
+    console.error('Erro ao listar eventos:', error);
+    return { success: false, error: error.message };
   }
-}
+};
 
 /**
- * Cria um evento no Google Calendar
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- * @param {Object} eventData - Dados do evento a ser criado
+ * Cria um novo evento no calendário
+ * @param {string} userId - ID do usuário
+ * @param {Object} eventData - Dados do evento
  * @returns {Promise<Object>} Evento criado
  */
-async function createEvent(accessToken, refreshToken, eventData) {
+const createEvent = async (userId, eventData) => {
   try {
-    const auth = setupOAuth2Client(accessToken, refreshToken);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const { success, client, error } = await getAuthenticatedClient(userId);
+    if (!success) throw new Error(error);
     
-    const response = await calendar.events.insert({
+    const response = await client.events.insert({
       calendarId: 'primary',
-      resource: eventData,
-      sendUpdates: 'all', // Envia notificações por email
+      resource: eventData
     });
     
-    return response.data;
+    return { success: true, event: response.data };
   } catch (error) {
     console.error('Erro ao criar evento:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
-}
+};
 
 /**
- * Atualiza um evento no Google Calendar
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- * @param {string} eventId - ID do evento a ser atualizado
+ * Atualiza um evento existente
+ * @param {string} userId - ID do usuário
+ * @param {string} eventId - ID do evento
  * @param {Object} eventData - Dados atualizados do evento
  * @returns {Promise<Object>} Evento atualizado
  */
-async function updateEvent(accessToken, refreshToken, eventId, eventData) {
+const updateEvent = async (userId, eventId, eventData) => {
   try {
-    const auth = setupOAuth2Client(accessToken, refreshToken);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const { success, client, error } = await getAuthenticatedClient(userId);
+    if (!success) throw new Error(error);
     
-    const response = await calendar.events.update({
+    const response = await client.events.update({
       calendarId: 'primary',
       eventId,
-      resource: eventData,
-      sendUpdates: 'all', // Envia notificações por email
+      resource: eventData
     });
     
-    return response.data;
+    return { success: true, event: response.data };
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
-}
+};
 
 /**
- * Exclui um evento do Google Calendar
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- * @param {string} eventId - ID do evento a ser excluído
- * @returns {Promise<void>}
+ * Remove um evento do calendário
+ * @param {string} userId - ID do usuário
+ * @param {string} eventId - ID do evento
+ * @returns {Promise<Object>} Resultado da operação
  */
-async function deleteEvent(accessToken, refreshToken, eventId) {
+const deleteEvent = async (userId, eventId) => {
   try {
-    const auth = setupOAuth2Client(accessToken, refreshToken);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const { success, client, error } = await getAuthenticatedClient(userId);
+    if (!success) throw new Error(error);
     
-    await calendar.events.delete({
+    await client.events.delete({
       calendarId: 'primary',
-      eventId,
-      sendUpdates: 'all', // Envia notificações por email
+      eventId
     });
     
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('Erro ao excluir evento:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
-}
+};
 
 /**
- * Verifica se a integração com o Google Calendar está ativa
- * @param {string} accessToken - Token de acesso
- * @param {string} refreshToken - Token de atualização
- * @returns {Promise<boolean>} Status da integração
+ * Busca detalhes de um evento específico
+ * @param {string} userId - ID do usuário
+ * @param {string} eventId - ID do evento
+ * @returns {Promise<Object>} Detalhes do evento
  */
-async function checkIntegrationStatus(accessToken, refreshToken) {
+const getEvent = async (userId, eventId) => {
   try {
-    const auth = setupOAuth2Client(accessToken, refreshToken);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const { success, client, error } = await getAuthenticatedClient(userId);
+    if (!success) throw new Error(error);
     
-    // Tenta obter a lista de calendários para verificar se a autenticação está funcionando
-    await calendar.calendarList.list({ maxResults: 1 });
+    const response = await client.events.get({
+      calendarId: 'primary',
+      eventId
+    });
     
-    return true;
+    return { success: true, event: response.data };
   } catch (error) {
-    console.error('Erro ao verificar status da integração:', error);
-    return false;
+    console.error('Erro ao buscar evento:', error);
+    return { success: false, error: error.message };
   }
-}
+};
 
 module.exports = {
-  createAuthUrl,
-  getTokenFromCode,
-  getEvents,
+  generateAuthUrl,
+  handleAuthCode,
+  checkIntegrationStatus,
+  disconnectIntegration,
+  listEvents,
   createEvent,
   updateEvent,
   deleteEvent,
-  checkIntegrationStatus
+  getEvent
 };
