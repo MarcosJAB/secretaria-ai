@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autorização Google Calendar - Secretária AI</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .callback-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      text-align: center;
+      padding: 2rem;
+    }
+    
+    .status-icon {
+      font-size: 5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .success {
+      color: #4CAF50;
+    }
+    
+    .error {
+      color: #F44336;
+    }
+    
+    .message {
+      font-size: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .details {
+      font-size: 1rem;
+      margin-bottom: 2rem;
+      max-width: 600px;
+    }
+    
+    .action-button {
+      padding: 0.75rem 1.5rem;
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color 0.3s;
+    }
+    
+    .action-button:hover {
+      background-color: #3367D6;
+    }
+  </style>
+</head>
+<body>
+  <div class="callback-container">
+    <div id="loading">
+      <div class="spinner"></div>
+      <p class="message">Processando autorização...</p>
+    </div>
+    
+    <div id="success" style="display: none;">
+      <div class="status-icon success">✓</div>
+      <h2 class="message">Autorização concluída com sucesso!</h2>
+      <p class="details">Sua conta do Google Calendar foi conectada com sucesso. Agora você pode gerenciar seus eventos diretamente pela Secretária AI.</p>
+      <a href="/integracoes.html" class="action-button">Voltar para Integrações</a>
+    </div>
+    
+    <div id="error" style="display: none;">
+      <div class="status-icon error">✗</div>
+      <h2 class="message">Erro na autorização</h2>
+      <p class="details" id="error-details">Ocorreu um erro ao conectar sua conta do Google Calendar. Por favor, tente novamente.</p>
+      <a href="/integracoes.html" class="action-button">Voltar para Integrações</a>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Obter código da URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      
+      if (error) {
+        // Mostrar mensagem de erro
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error-details').textContent = 'Erro: ' + error;
+        return;
+      }
+      
+      if (!code) {
+        // Mostrar mensagem de erro se não houver código
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error-details').textContent = 'Nenhum código de autorização recebido.';
+        return;
+      }
+      
+      // Enviar código para o servidor processar
+      fetch('/api/google-calendar/process-code-public', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      })
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('loading').style.display = 'none';
+        
+        if (data.success) {
+          // Mostrar mensagem de sucesso
+          document.getElementById('success').style.display = 'block';
+        } else {
+          // Mostrar mensagem de erro
+          document.getElementById('error').style.display = 'block';
+          document.getElementById('error-details').textContent = data.message || 'Ocorreu um erro ao processar a autorização.';
+        }
+      })
+      .catch(error => {
+        // Mostrar mensagem de erro em caso de falha na requisição
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error-details').textContent = 'Erro ao comunicar com o servidor: ' + error.message;
+      });
+    });
+  </script>
+</body>
+</html>
