@@ -5,12 +5,10 @@
 
 const whatsappIntegration = require('./whatsapp-integration');
 const googleCalendarIntegration = require('./google-calendar-integration');
-const webhookRoutes = require('./webhook-routes');
 const auth = require('./auth');
 
 module.exports = {
   whatsapp: whatsappIntegration,
   googleCalendar: googleCalendarIntegration,
-  webhooks: webhookRoutes,
   auth
 };
