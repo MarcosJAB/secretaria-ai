@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conectar WhatsApp - Secretaria AI</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Cabeçalho -->
+    <header class="app-header">
+      <div class="logo">
+        <a href="/dashboard.html">
+          <i class="fas fa-robot"></i>
+          <span>Secretaria AI</span>
+        </a>
+      </div>
+      <nav class="main-nav">
+        <ul>
+          <li><a href="/dashboard.html"><i class="fas fa-home"></i> Dashboard</a></li>
+          <li><a href="/whatsapp.html" class="active"><i class="fab fa-whatsapp"></i> WhatsApp</a></li>
+          <li><a href="/calendar.html"><i class="far fa-calendar-alt"></i> Calendário</a></li>
+          <li><a href="/settings.html"><i class="fas fa-cog"></i> Configurações</a></li>
+        </ul>
+      </nav>
+      <div class="user-menu">
+        <button id="user-dropdown-btn" class="user-dropdown-btn">
+          <i class="fas fa-user-circle"></i>
+          <span id="username">Usuário</span>
+          <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="dropdown-menu" id="user-dropdown">
+          <a href="/profile.html"><i class="fas fa-user"></i> Perfil</a>
+          <a href="#" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Sair</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Conteúdo principal -->
+    <main class="app-content">
+      <div class="page-header">
+        <h1><i class="fab fa-whatsapp"></i> Conexão do WhatsApp</h1>
+        <p>Conecte sua conta do WhatsApp para enviar e receber mensagens automaticamente.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Status da Conexão</h2>
+        </div>
+        <div class="card-body">
+          <div class="connection-status">
+            <div class="status-indicator">
+              <span id="whatsapp-status" class="status-badge status-disconnected">Desconectado</span>
+            </div>
+            <div class="connection-actions">
+              <button id="whatsapp-connect-btn" class="btn btn-primary">
+                <i class="fas fa-plug"></i> Conectar WhatsApp
+              </button>
+              <button id="whatsapp-disconnect-btn" class="btn btn-danger" disabled>
+                <i class="fas fa-unlink"></i> Desconectar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="qrcode-card">
+        <div class="card-header">
+          <h2>QR Code para Conexão</h2>
+        </div>
+        <div class="card-body">
+          <div id="whatsapp-qrcode" class="qrcode-container">
+            <!-- QR Code será exibido aqui -->
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Instruções</h2>
+        </div>
+        <div class="card-body">
+          <ol class="instructions-list">
+            <li>Clique no botão <strong>Conectar WhatsApp</strong> acima.</li>
+            <li>Abra o WhatsApp no seu celular.</li>
+            <li>Toque em <strong>Menu</strong> ou <strong>Configurações</strong> e selecione <strong>WhatsApp Web</strong>.</li>
+            <li>Aponte a câmera do seu celular para o QR Code exibido nesta página.</li>
+            <li>Aguarde a confirmação da conexão.</li>
+          </ol>
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>Seu WhatsApp permanecerá conectado até que você desconecte manualmente ou saia do WhatsApp Web no seu celular.</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Rodapé -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <p>&copy; 2025 Secretaria AI. Todos os direitos reservados.</p>
+        <div class="footer-links">
+          <a href="/terms.html">Termos de Uso</a>
+          <a href="/privacy.html">Política de Privacidade</a>
+          <a href="/help.html">Ajuda</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/whatsapp-connect.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Verifica autenticação
+      Auth.checkAuth();
+      
+      // Inicializa o módulo de conexão do WhatsApp
+      WhatsAppConnect.init('whatsapp-qrcode', 'whatsapp-status');
+      
+      // Configura os botões
+      document.getElementById('whatsapp-connect-btn').addEventListener('click', function() {
+        WhatsAppConnect.connect();
+      });
+      
+      document.getElementById('whatsapp-disconnect-btn').addEventListener('click', function() {
+        WhatsAppConnect.disconnect();
+      });
+      
+      // Configura o dropdown do usuário
+      const userDropdownBtn = document.getElementById('user-dropdown-btn');
+      const userDropdown = document.getElementById('user-dropdown');
+      
+      userDropdownBtn.addEventListener('click', function() {
+        userDropdown.classList.toggle('show');
+      });
+      
+      // Fecha o dropdown quando clicar fora dele
+      window.addEventListener('click', function(event) {
+        if (!event.target.matches('.user-dropdown-btn') && !event.target.closest('.user-dropdown-btn')) {
+          if (userDropdown.classList.contains('show')) {
+            userDropdown.classList.remove('show');
+          }
+        }
+      });
+      
+      // Configura o botão de logout
+      document.getElementById('logout-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        Auth.logout();
+      });
+    });
+  </script>
+</body>
+</html>
