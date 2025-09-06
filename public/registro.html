@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro - Secretária AI</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    
+    .register-container {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 450px;
+      padding: 2.5rem;
+      margin: 2rem 1rem;
+    }
+    
+    .register-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .register-title {
+      font-size: 1.8rem;
+      color: #333;
+      margin: 0;
+    }
+    
+    .register-subtitle {
+      color: #666;
+      margin-top: 0.5rem;
+    }
+    
+    .register-form {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: #333;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+    
+    .form-input:focus {
+      border-color: #4285F4;
+      outline: none;
+    }
+    
+    .register-button {
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin-top: 1rem;
+    }
+    
+    .register-button:hover {
+      background-color: #3367D6;
+    }
+    
+    .login-link {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #666;
+    }
+    
+    .login-link a {
+      color: #4285F4;
+      text-decoration: none;
+    }
+    
+    .login-link a:hover {
+      text-decoration: underline;
+    }
+    
+    .error-message {
+      background-color: #FFEBEE;
+      color: #D32F2F;
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    
+    .success-message {
+      background-color: #E8F5E9;
+      color: #2E7D32;
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 0.5rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="register-container">
+    <div class="register-header">
+      <h1 class="register-title">Secretária AI</h1>
+      <p class="register-subtitle">Crie sua conta</p>
+    </div>
+    
+    <div class="error-message" id="error-message"></div>
+    <div class="success-message" id="success-message"></div>
+    
+    <form class="register-form" id="register-form">
+      <div class="form-group">
+        <label for="name" class="form-label">Nome</label>
+        <input type="text" id="name" class="form-input" placeholder="Seu nome completo" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" id="email" class="form-input" placeholder="Seu email" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password" class="form-label">Senha</label>
+        <input type="password" id="password" class="form-input" placeholder="Sua senha" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="confirm-password" class="form-label">Confirmar Senha</label>
+        <input type="password" id="confirm-password" class="form-input" placeholder="Confirme sua senha" required>
+      </div>
+      
+      <button type="submit" class="register-button" id="register-button">Registrar</button>
+    </form>
+    
+    <div class="login-link">
+      Já tem uma conta? <a href="/login.html">Faça login</a>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const registerForm = document.getElementById('register-form');
+      const errorMessage = document.getElementById('error-message');
+      const successMessage = document.getElementById('success-message');
+      const registerButton = document.getElementById('register-button');
+      
+      // Verificar se já existe um token válido
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        // Verificar se o token é válido
+        fetch('/api/auth/verify', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Token válido, redirecionar para a página principal
+            window.location.href = '/index.html';
+          }
+        })
+        .catch(error => {
+          console.error('Erro ao verificar token:', error);
+          // Limpar token inválido
+          localStorage.removeItem('authToken');
+        });
+      }
+      
+      registerForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+        
+        // Obter valores do formulário
+        const name = document.getElementById('name').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        
+        // Validar senhas
+        if (password !== confirmPassword) {
+          errorMessage.textContent = 'As senhas não coincidem.';
+          errorMessage.style.display = 'block';
+          successMessage.style.display = 'none';
+          return;
+        }
+        
+        // Mostrar estado de carregamento no botão
+        const originalText = registerButton.textContent;
+        registerButton.innerHTML = '<span class="loading-spinner"></span>Registrando...';
+        registerButton.disabled = true;
+        
+        // Esconder mensagens anteriores
+        errorMessage.style.display = 'none';
+        successMessage.style.display = 'none';
+        
+        // Enviar requisição de registro
+        fetch('/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: name,
+            email: email,
+            password: password
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Exibir mensagem de sucesso
+            successMessage.textContent = 'Registro realizado com sucesso! Redirecionando para o login...';
+            successMessage.style.display = 'block';
+            // Limpar formulário
+            registerForm.reset();
+            // Redirecionar para login após 2 segundos
+            setTimeout(function() {
+              window.location.href = '/login.html';
+            }, 2000);
+          } else {
+            // Exibir mensagem de erro
+            errorMessage.textContent = data.message || 'Erro ao registrar. Verifique os dados informados.';
+            errorMessage.style.display = 'block';
+            // Restaurar botão
+            registerButton.innerHTML = originalText;
+            registerButton.disabled = false;
+          }
+        })
+        .catch(error => {
+          console.error('Erro ao registrar:', error);
+          // Exibir mensagem de erro
+          errorMessage.textContent = 'Erro ao conectar ao servidor. Tente novamente mais tarde.';
+          errorMessage.style.display = 'block';
+          // Restaurar botão
+          registerButton.innerHTML = originalText;
+          registerButton.disabled = false;
+        });
+      });
+    });
+  </script>
+</body>
+</html>
